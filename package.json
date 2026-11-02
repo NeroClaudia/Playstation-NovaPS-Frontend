@@ -2,11 +2,23 @@
   "name": "novaps",
   "private": true,
   "scripts": {
-    "dev": "tailwindcss -i ./src/input.css -o ./css/style.css --watch",
-    "build": "tailwindcss -i ./src/input.css -o ./css/style.css --minify"
+    "dev": "run-p dev:*",
+    "dev:index": "tailwindcss -i ./src/index.css -o ./css/index.css --watch",
+    "dev:login": "tailwindcss -i ./src/login.css -o ./css/login.css --watch",
+    "dev:signup": "tailwindcss -i ./src/signup.css -o ./css/signup.css --watch",
+    "dev:forgot-password": "tailwindcss -i ./src/forgot-password.css -o ./css/forgot-password.css --watch",
+    "build": "run-s build:*",
+    "build:index": "tailwindcss -i ./src/index.css -o ./css/index.css --minify",
+    "build:login": "tailwindcss -i ./src/login.css -o ./css/login.css --minify",
+    "build:signup": "tailwindcss -i ./src/signup.css -o ./css/signup.css --minify",
+    "build:forgot-password": "tailwindcss -i ./src/forgot-password.css -o ./css/forgot-password.css --minify",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
+    "npm-run-all2": "^9.0.4",
+    "prettier": "^3.9.10",
     "tailwindcss": "^4.1.0"
   }
 }
