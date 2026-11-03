@@ -12,6 +12,7 @@
     />
     <link rel="stylesheet" href="css/index.css" />
     <script src="js/shared/session.js"></script>
+    <script src="js/shared/navbar.js" defer></script>
     <script src="js/index.js" defer></script>
   </head>
   <body class="bg-white text-slate-800">
@@ -69,12 +70,11 @@
         >
           <div class="group/tip relative">
             <a
-              href="#"
-              class="icon-btn"
+              href="pages/time-remaining.html"
+              class="icon-btn aria-[current=page]:bg-tip"
               aria-label="Time Remaining"
               aria-describedby="tip-time"
-            >
-              <svg
+              ><svg
                 width="24"
                 height="24"
                 viewBox="0 0 24 24"
@@ -83,26 +83,25 @@
                 stroke-width="1.6"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v6l4 2" />
-              </svg>
-            </a>
-            <span id="tip-time" role="tooltip" class="tooltip">
-              <span class="block text-sm font-medium">Time Remaining</span>
-              <span class="block text-xs text-sky-200"
+                <path d="M12 6v6l4 2" /></svg
+            ></a>
+            <span id="tip-time" role="tooltip" class="tooltip"
+              ><span class="block text-sm font-medium">Time Remaining</span
+              ><span class="block text-xs text-sky-200"
                 >See how much rental time is left</span
-              >
-            </span>
+              ></span
+            >
           </div>
           <div class="group/tip relative">
             <a
-              href="#"
-              class="icon-btn"
+              href="pages/order-status.html"
+              class="icon-btn aria-[current=page]:bg-tip"
               aria-label="Order Status"
               aria-describedby="tip-orders"
-            >
-              <svg
+              ><svg
                 width="24"
                 height="24"
                 viewBox="0 0 24 24"
@@ -111,23 +110,23 @@
                 stroke-width="1.6"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <rect x="5" y="3" width="14" height="18" rx="2" />
-                <path d="M9 3h6v3H9zM9 11h6M9 15h6" />
-              </svg>
-            </a>
-            <span id="tip-orders" role="tooltip" class="tooltip">
-              <span class="block text-sm font-medium">Order Status</span>
-              <span class="block text-xs text-sky-200"
+                <path d="M9 3h6v3H9zM9 11h6M9 15h6" /></svg
+            ></a>
+            <span id="tip-orders" role="tooltip" class="tooltip"
+              ><span class="block text-sm font-medium">Order Status</span
+              ><span class="block text-xs text-sky-200"
                 >View your order history &amp; status</span
-              >
-            </span>
+              ></span
+            >
           </div>
           <div class="group group/tip relative">
             <button
               type="button"
               id="profileBtn"
-              class="icon-btn w-14 border-white"
+              class="icon-btn w-14 border-white aria-[current=page]:bg-tip"
               aria-haspopup="true"
               aria-expanded="false"
               aria-label="My Account"
@@ -142,6 +141,7 @@
                 stroke-width="1.6"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <circle cx="12" cy="8" r="4" />
                 <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
@@ -151,17 +151,16 @@
               id="tip-account"
               role="tooltip"
               class="tooltip group-data-[open]:hidden"
-            >
-              <span class="block text-sm font-medium">My Account</span>
-              <span class="block text-xs text-sky-200"
+              ><span class="block text-sm font-medium">My Account</span
+              ><span class="block text-xs text-sky-200"
                 >View your account details</span
-              >
-            </span>
+              ></span
+            >
             <div
               class="invisible absolute right-0 top-[50px] z-10 min-w-[140px] -translate-y-1.5 rounded-lg bg-white p-1.5 opacity-0 shadow-xl transition-all duration-200 group-data-[open]:visible group-data-[open]:translate-y-0 group-data-[open]:opacity-100"
             >
               <a
-                href="#"
+                href="pages/account.html"
                 class="block w-full rounded-md px-3 py-2 text-left text-[15px] font-medium text-slate-800 transition-colors hover:bg-slate-100"
                 >My Account</a
               >
@@ -501,12 +500,16 @@
               >
             </li>
             <li>
-              <a href="#" class="transition-colors hover:text-white"
+              <a
+                href="pages/time-remaining.html"
+                class="transition-colors hover:text-white"
                 >Time Remaining</a
               >
             </li>
             <li>
-              <a href="#" class="transition-colors hover:text-white"
+              <a
+                href="pages/order-status.html"
+                class="transition-colors hover:text-white"
                 >Order Status</a
               >
             </li>

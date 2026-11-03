@@ -1,0 +1,26 @@
+/* pages/account.html (My Profile) -> builds to css/account.css */
+@import "tailwindcss" source(none);
+@import "./partials/shared.css";
+@import "./partials/navbar.css";
+@source "../pages/account.html";
+@source "../js/account.js";
+
+@layer components {
+  /* Text input: read-only = grey, editing = white with focus ring */
+  .field-input {
+    @apply h-8 w-full rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-800;
+    @apply transition-all duration-150 placeholder:text-slate-400;
+    @apply hover:border-indigo-300;
+    @apply focus:border-indigo-500 focus:ring-[3px] focus:ring-indigo-500/20 focus:outline-none;
+    @apply read-only:cursor-default read-only:border-slate-200 read-only:bg-slate-100 read-only:text-slate-500;
+    @apply read-only:hover:border-slate-200 read-only:focus:border-slate-200 read-only:focus:ring-0;
+    @apply group-data-[invalid]/field:border-red-600;
+  }
+
+  /* Small outlined action button (Edit, Change Password) */
+  .btn-edit {
+    @apply border-blue-600 bg-white px-3 py-0.5 text-sm font-medium text-blue-600;
+    @apply focus-visible:outline-blue-600;
+    @apply enabled:hover:bg-blue-600 enabled:hover:text-white;
+  }
+}

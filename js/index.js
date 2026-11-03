@@ -1,6 +1,6 @@
 /*
- * Home page: "login required" pop-up, order buttons and profile menu.
- * Requires js/shared/session.js.
+ * Home page: "login required" pop-up and order buttons.
+ * Requires js/shared/session.js. The profile menu lives in js/shared/navbar.js.
  */
 (function () {
   var modal = document.getElementById("loginModal");
@@ -43,26 +43,5 @@
   });
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") closeModal();
-  });
-
-  // Profile dropdown (logout)
-  var profileBtn = document.getElementById("profileBtn");
-  var profile = profileBtn.parentElement;
-
-  function setProfileOpen(open) {
-    profile.toggleAttribute("data-open", open);
-    profileBtn.setAttribute("aria-expanded", String(open));
-  }
-
-  profileBtn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    setProfileOpen(!profile.hasAttribute("data-open"));
-  });
-  document.addEventListener("click", function () {
-    setProfileOpen(false);
-  });
-  document.getElementById("logoutBtn").addEventListener("click", function () {
-    NovaPS.logout();
-    document.documentElement.classList.remove("logged-in");
   });
 })();

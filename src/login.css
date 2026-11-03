@@ -1,4 +1,4 @@
 /* pages/login.html -> builds to css/login.css */
 @import "tailwindcss" source(none);
-@import "./shared.css";
+@import "./partials/shared.css";
 @source "../pages/login.html";

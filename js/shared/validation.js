@@ -1,11 +1,13 @@
 /*
- * Shared by the login, sign up and forgot password pages: form validation.
+ * Shared form validation (login, sign up, forgot password, my profile).
  * Requires js/shared/session.js.
  *
- *   NovaPS.initForm(form, onValid)
+ *   NovaPS.checkField(input, form)   validate one field, show/hide its error
+ *   NovaPS.initForm(form, onValid)   validate on submit, then call onValid(form)
  *
- * Fields opt in with data-validate="required|email|phone|password|match|file".
- * onValid(form) runs only when every field passes.
+ * Inputs opt in with data-validate="required email phone password match different file"
+ * (space separated, the first failing rule wins). Each input sits inside an
+ * element with [data-field] that also holds a [data-error] element.
  */
 (function () {
   var rules = {
@@ -32,6 +34,11 @@
         ? ""
         : "Passwords do not match.";
     },
+    different: function (v, el, form) {
+      return v !== form.querySelector(el.dataset.other).value
+        ? ""
+        : "New password must be different from your current password.";
+    },
     file: function (v, el) {
       var f = el.files[0];
       if (!f) return "Please upload your ID card.";
@@ -41,25 +48,32 @@
     },
   };
 
+  // The [data-invalid] attribute drives the red border through Tailwind
+  // (group-data-[invalid]/field:...)
+  function checkField(el, form) {
+    var names = el.dataset.validate.split(" ");
+    var msg = "";
+    for (var i = 0; i < names.length && !msg; i++) {
+      msg = rules[names[i]](el.value, el, form);
+    }
+    var field = el.closest("[data-field]");
+    field.toggleAttribute("data-invalid", !!msg);
+    field.querySelector("[data-error]").textContent = msg;
+    return !msg;
+  }
+
+  NovaPS.rules = rules;
+  NovaPS.checkField = checkField;
+
   NovaPS.initForm = function (form, onValid) {
     var inputs = [].slice.call(form.querySelectorAll("[data-validate]"));
-
-    // The [data-invalid] attribute drives the red border through Tailwind
-    // (group-data-[invalid]/field:...)
-    function check(el) {
-      var msg = rules[el.dataset.validate](el.value, el, form);
-      var field = el.closest("[data-field]");
-      field.toggleAttribute("data-invalid", !!msg);
-      field.querySelector("[data-error]").textContent = msg;
-      return !msg;
-    }
 
     inputs.forEach(function (el) {
       ["input", "change"].forEach(function (evt) {
         el.addEventListener(evt, function () {
           var field = el.closest("[data-field]");
           if (el.type === "file" || field.hasAttribute("data-invalid")) {
-            check(el);
+            checkField(el, form);
           }
         });
       });
@@ -69,7 +83,7 @@
       e.preventDefault();
       var ok = true;
       inputs.forEach(function (el) {
-        if (!check(el)) ok = false;
+        if (!checkField(el, form)) ok = false;
       });
       if (!ok) {
         var bad = form.querySelector("[data-invalid] input");
