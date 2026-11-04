@@ -1305,6 +1305,15 @@
           var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
       }
     }
+    &:disabled {
+      cursor: not-allowed;
+    }
+    &:disabled {
+      background-color: var(--color-slate-100);
+    }
+    &:disabled {
+      color: var(--color-slate-400);
+    }
     &:is(:where(.group\/field)[data-invalid] *) {
       border-color: var(--color-red-600);
     }

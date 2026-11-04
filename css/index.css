@@ -8,6 +8,9 @@
     --font-mono:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
+    --color-red-600: oklch(57.7% 0.245 27.325);
+    --color-amber-100: oklch(96.2% 0.059 95.617);
+    --color-amber-600: oklch(66.6% 0.179 58.318);
     --color-yellow-600: oklch(68.1% 0.162 75.834);
     --color-cyan-400: oklch(78.9% 0.154 211.53);
     --color-sky-200: oklch(90.1% 0.058 230.902);
@@ -280,6 +283,9 @@
   }
 }
 @layer utilities {
+  .pointer-events-none {
+    pointer-events: none;
+  }
   .invisible {
     visibility: hidden;
   }
@@ -339,6 +345,9 @@
   }
   .mb-4 {
     margin-bottom: calc(var(--spacing) * 4);
+  }
+  .mb-5 {
+    margin-bottom: calc(var(--spacing) * 5);
   }
   .mb-6 {
     margin-bottom: calc(var(--spacing) * 6);
@@ -403,6 +412,9 @@
   .max-w-\[380px\] {
     max-width: 380px;
   }
+  .max-w-\[400px\] {
+    max-width: 400px;
+  }
   .max-w-\[720px\] {
     max-width: 720px;
   }
@@ -431,9 +443,6 @@
     --tw-scale-y: 95%;
     --tw-scale-z: 95%;
     scale: var(--tw-scale-x) var(--tw-scale-y);
-  }
-  .rotate-90 {
-    rotate: 90deg;
   }
   .cursor-pointer {
     cursor: pointer;
@@ -531,6 +540,9 @@
   }
   .border-white {
     border-color: var(--color-white);
+  }
+  .bg-amber-100 {
+    background-color: var(--color-amber-100);
   }
   .bg-cyan-400 {
     background-color: var(--color-cyan-400);
@@ -749,6 +761,9 @@
     --tw-font-weight: var(--font-weight-semibold);
     font-weight: var(--font-weight-semibold);
   }
+  .text-amber-600 {
+    color: var(--color-amber-600);
+  }
   .text-black {
     color: var(--color-black);
   }
@@ -757,6 +772,9 @@
   }
   .text-indigo-500 {
     color: var(--color-indigo-500);
+  }
+  .text-red-600 {
+    color: var(--color-red-600);
   }
   .text-sky-200 {
     color: var(--color-sky-200);
@@ -778,6 +796,9 @@
   }
   .opacity-0 {
     opacity: 0%;
+  }
+  .opacity-50 {
+    opacity: 50%;
   }
   .shadow-xl {
     --tw-shadow:
@@ -962,8 +983,11 @@
     }
   }
   @media (width >= 48rem) {
-    .md\:rotate-0 {
-      rotate: 0deg;
+    .md\:block {
+      display: block;
+    }
+    .md\:hidden {
+      display: none;
     }
     .md\:grid-cols-\[repeat\(2\,340px\)\] {
       grid-template-columns: repeat(2, 340px);

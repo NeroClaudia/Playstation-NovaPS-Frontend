@@ -151,6 +151,10 @@
   });
 
   function commit(key, patch) {
+    // Keep the order history of an account whose email changes
+    if (key === "email") {
+      NovaPS.orders.renameOwner(NovaPS.profile.get().email, patch.email);
+    }
     NovaPS.profile.set(patch);
     stopEdit();
     render();
