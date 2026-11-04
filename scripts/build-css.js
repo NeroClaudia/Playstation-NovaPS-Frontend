@@ -9,10 +9,22 @@ const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 
 const watch = process.argv.includes("--watch");
-const pages = fs
-  .readdirSync("src")
-  .filter((file) => file.endsWith(".css"))
-  .map((file) => file.replace(/\.css$/, ""));
+
+// A page entry must start Tailwind with: @import "tailwindcss" ...
+// Other .css files left in src/ (old or partial files) are skipped instead of
+// breaking the whole build.
+const pages = [];
+for (const file of fs.readdirSync("src").filter((f) => f.endsWith(".css"))) {
+  const source = fs.readFileSync(`src/${file}`, "utf8");
+  if (/@import\s+["']tailwindcss["']/.test(source)) {
+    pages.push(file.replace(/\.css$/, ""));
+  } else {
+    console.warn(
+      `Skipping src/${file}: no @import "tailwindcss" (not a page entry). ` +
+        "Shared pieces belong in src/partials/ - delete this file if it is an old copy.",
+    );
+  }
+}
 
 function tailwindArgs(page) {
   const args = [
@@ -36,7 +48,10 @@ if (watch) {
       stdio: "inherit",
       shell: true,
     });
-    if (result.status !== 0) process.exit(result.status || 1);
+    if (result.status !== 0) {
+      console.error(`Failed to build src/${page}.css`);
+      process.exit(result.status || 1);
+    }
   }
   // Tailwind output is formatted with Prettier so it stays readable
   spawnSync("npx", ["prettier", "--write", "css"], {

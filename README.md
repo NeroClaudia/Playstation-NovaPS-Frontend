@@ -56,6 +56,11 @@ npm run format:check   # only check
 Install the "Prettier - Code formatter" extension in VS Code; format on save is
 already enabled in `.vscode/settings.json`.
 
+## Deploy (Vercel)
+
+`vercel.json` runs `npm run build` and serves the project root. Commit the
+`css/` folder too, so the site also works on hosts that do not build (GitHub Pages).
+
 ## Demo notes
 
 Frontend only: login, profile and passwords are NOT stored securely. The login
