@@ -50,6 +50,13 @@
       text: "Thank you for renting with NovaPS. Enjoy the game!",
       note: "You can order again anytime.",
     },
+    returned: {
+      tone: "text-green-500",
+      glyph: "check",
+      title: "Order Complete",
+      text: "Thank you for renting with NovaPS. We hope to see you again!",
+      note: "You can order again anytime.",
+    },
     canceled: {
       tone: "text-red-500",
       glyph: "cross",
@@ -101,6 +108,9 @@
     ];
     if (order.status === "canceled")
       extra.push({ label: "Reason", value: order.cancelReason });
+    if (order.status === "rejected" && order.rejectReason) {
+      extra.push({ label: "Reason", value: order.rejectReason });
+    }
     if (order.notes) extra.push({ label: "Notes", value: order.notes });
     order.extra = extra;
 
@@ -120,7 +130,8 @@
     $("pay-box").hidden = !unpaid;
     $("act-pay").hidden = !unpaid;
     $("act-pay").href = "payment.html?order=" + encodeURIComponent(order.id);
-    $("act-again").hidden = order.status !== "complete";
+    $("act-again").hidden =
+      order.status !== "complete" && order.status !== "returned";
     $("act-again").href = "order-form.html?unit=" + order.items[0].unit;
 
     clearInterval(timer);

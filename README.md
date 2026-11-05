@@ -13,11 +13,19 @@ novaps/
 │   ├── payment.html              QRIS payment + 5 minute timer (needs login)
 │   ├── order-detail.html         Receipt / order detail (needs login)
 │   └── account.html              My Profile (needs login)
+├── admin/                        Admin dashboard (log in at admin/login.html)
+│   ├── login.html
+│   ├── dashboard.html            Status totals, orders to verify, sales
+│   ├── orders.html               All orders: search, filter, verify
+│   ├── time-remaining.html       (still being built)
+│   ├── units.html                Price, total and maintenance units
+│   └── users.html                Users, details and blocking
 ├── src/                          Tailwind sources (edit these)
 │   ├── partials/
 │   │   ├── shared.css            Theme, buttons, variants (every page)
 │   │   ├── navbar.css            Logged-in navbar icons + tooltip
 │   │   ├── forms.css             Text inputs (profile, order form, payment)
+│   │   ├── admin.css             Small buttons in the admin tables
 │   │   └── tabs.css              Status tabs
 │   └── <page>.css                One entry per page
 ├── assets/img/qris.png           QRIS code shown on the payment page
@@ -28,7 +36,9 @@ novaps/
 │   │   ├── navbar.js             Profile menu + logout
 │   │   ├── validation.js         Form validation
 │   │   ├── image.js              Image resize helper
-│   │   ├── orders.js             Stock, orders, 5 minute payment timer
+│   │   ├── orders.js             Units, stock, orders, 5 minute payment timer
+│   │   ├── admin.js              Admin session, page guard, Admin menu
+│   │   ├── admin-ui.js           Admin tables, pop-ups, order detail pop-up
 │   │   └── tabs.js               Tab behaviour
 │   └── <page>.js                 One file per page
 ├── scripts/build-css.js          Builds every src/<page>.css into css/
@@ -66,6 +76,12 @@ already enabled in `.vscode/settings.json`.
 
 `vercel.json` runs `npm run build` and serves the project root. Commit the
 `css/` folder too, so the site also works on hosts that do not build (GitHub Pages).
+
+## Admin (demo)
+
+Open `admin/login.html`. Demo login: `admin@novaps.com` / `Admin#123`.
+These are written in `js/shared/admin.js`, so anyone can read them: a real
+admin login must be checked on the server.
 
 ## Demo notes
 

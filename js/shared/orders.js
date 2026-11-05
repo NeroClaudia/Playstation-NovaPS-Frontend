@@ -1,36 +1,60 @@
 /*
- * Shared order system (stock, orders, 5-minute payment timer).
+ * Shared order system: units (stock, prices), orders, 5-minute payment timer.
  * Requires js/shared/session.js.
  *
- * DEMO ONLY - stock and orders live in this browser's localStorage, so every
- * visitor has their own stock. A real backend/database must own this data.
+ * DEMO ONLY - everything lives in this browser's localStorage, so every
+ * visitor has their own data. A real backend/database must own this data.
  *
- *   NovaPS.orders.create / pay / cancel / get / all / unpaid / sweep
- *   NovaPS.stock.get(unit)
- *   NovaPS.summaryRows + NovaPS.renderRows   order summary lists
+ * Available units are always CALCULATED, never stored:
+ *   available = total - maintenance - rented
+ * where "rented" = units inside orders that are not_paid, pending, shipped or
+ * complete (not returned yet). Canceled, rejected and returned orders free
+ * their units automatically.
+ *
+ *   NovaPS.units.all / get / set            (admin "Unit" page)
+ *   NovaPS.stock.get(unit)                  available units
+ *   NovaPS.orders.create / pay / cancel / get / all / unpaid / sweep   (customer)
+ *   NovaPS.orders.adminAll / adminGet / adminAct                       (admin)
+ *   NovaPS.summaryRows + NovaPS.renderRows  order summary lists
  *   NovaPS.money / formatDate / formatTime / formatDays / formatClock
  */
 (function () {
   var ORDERS_KEY = "novaps_orders";
-  var STOCK_KEY = "novaps_stock";
+  var UNITS_KEY = "novaps_units";
   var PAY_WINDOW_MS = 5 * 60 * 1000;
+  var DAY_MS = 24 * 60 * 60 * 1000;
 
-  var PRODUCTS = {
-    ps4: { name: "PS4", label: "PS 4", price: 50000, stock: 10 },
-    ps5: { name: "PS5", label: "PS 5", price: 200000, stock: 2 },
+  // Statuses that keep a unit busy
+  var ACTIVE = ["not_paid", "pending", "shipped", "complete"];
+
+  var BASE = {
+    ps4: {
+      name: "PS4",
+      label: "PS 4",
+      price: 50000,
+      total: 10,
+      maintenance: 0,
+    },
+    ps5: {
+      name: "PS5",
+      label: "PS 5",
+      price: 200000,
+      total: 2,
+      maintenance: 0,
+    },
   };
 
-  NovaPS.PRODUCTS = PRODUCTS;
   NovaPS.MAX_DAYS = 7;
   NovaPS.MAX_UNITS = 2;
   NovaPS.LOW_STOCK = 3;
 
-  // Order statuses (admin-only ones are ready for the future dashboard)
+  // Order statuses as customers see them
   NovaPS.STATUS = {
     not_paid: { label: "Not Paid", text: "text-amber-600" },
     pending: { label: "Pending", text: "text-indigo-500" },
     shipped: { label: "Shipped", text: "text-sky-600" },
     complete: { label: "Complete", text: "text-green-600" },
+    returned: { label: "Complete", text: "text-green-600" }, // rental finished
     canceled: { label: "Canceled", text: "text-orange-700" },
     rejected: { label: "Rejected", text: "text-red-600" },
   };
@@ -59,46 +83,124 @@
     return (NovaPS.profile.get().email || "").toLowerCase();
   }
 
-  /* ---------- stock ---------- */
+  function allOrders() {
+    return read(ORDERS_KEY, []);
+  }
 
-  function stockAll() {
-    var saved = read(STOCK_KEY, {});
+  /* ---------- units: prices + stock ---------- */
+
+  function savedUnits() {
+    var saved = read(UNITS_KEY, {});
     var all = {};
-    Object.keys(PRODUCTS).forEach(function (unit) {
-      all[unit] =
-        typeof saved[unit] === "number" ? saved[unit] : PRODUCTS[unit].stock;
+    Object.keys(BASE).forEach(function (unit) {
+      all[unit] = Object.assign({}, BASE[unit], saved[unit] || {});
     });
     return all;
   }
 
-  function adjustStock(unit, delta) {
-    var all = stockAll();
-    all[unit] = Math.max(0, all[unit] + delta);
-    write(STOCK_KEY, all);
+  function rentedCount(unit) {
+    var count = 0;
+    allOrders().forEach(function (order) {
+      if (ACTIVE.indexOf(order.status) === -1) return;
+      order.items.forEach(function (item) {
+        if (item.unit === unit) count++;
+      });
+    });
+    return count;
   }
+
+  function unitInfo(unit) {
+    var data = savedUnits()[unit];
+    var rented = rentedCount(unit);
+    return {
+      name: data.name,
+      label: data.label,
+      price: data.price,
+      total: data.total,
+      maintenance: data.maintenance,
+      rented: rented,
+      available: Math.max(0, data.total - data.maintenance - rented),
+    };
+  }
+
+  // PRODUCTS[unit].price always follows the price set by the admin
+  var PRODUCTS = {};
+  Object.keys(BASE).forEach(function (unit) {
+    Object.defineProperty(PRODUCTS, unit, {
+      enumerable: true,
+      get: function () {
+        return {
+          name: BASE[unit].name,
+          label: BASE[unit].label,
+          price: savedUnits()[unit].price,
+        };
+      },
+    });
+  });
+  NovaPS.PRODUCTS = PRODUCTS;
+
+  NovaPS.units = {
+    all: function () {
+      NovaPS.orders.sweep();
+      var all = {};
+      Object.keys(BASE).forEach(function (unit) {
+        all[unit] = unitInfo(unit);
+      });
+      return all;
+    },
+    get: function (unit) {
+      NovaPS.orders.sweep();
+      return unitInfo(unit);
+    },
+    // patch = { price, total, maintenance } (admin). Throws a readable error.
+    set: function (unit, patch) {
+      if (!BASE[unit]) throw new Error("Unknown unit.");
+      var next = {
+        price: Number(patch.price),
+        total: Number(patch.total),
+        maintenance: Number(patch.maintenance),
+      };
+      Object.keys(next).forEach(function (key) {
+        if (!Number.isInteger(next[key]) || next[key] < 0) {
+          throw new Error("Please enter whole numbers (0 or more).");
+        }
+      });
+      if (next.price < 1000)
+        throw new Error("The price per day must be at least Rp 1.000.");
+      if (next.total > 999) throw new Error("The total unit is too large.");
+      if (next.maintenance > next.total) {
+        throw new Error("Maintenance cannot be more than the total unit.");
+      }
+      NovaPS.orders.sweep();
+      var rented = rentedCount(unit);
+      if (next.total - next.maintenance < rented) {
+        throw new Error(
+          rented +
+            " unit(s) are rented right now. Total minus maintenance cannot be lower than that.",
+        );
+      }
+      var saved = read(UNITS_KEY, {});
+      saved[unit] = next;
+      write(UNITS_KEY, saved);
+      return unitInfo(unit);
+    },
+  };
 
   NovaPS.stock = {
     get: function (unit) {
-      NovaPS.orders.sweep();
-      return stockAll()[unit];
+      return NovaPS.units.get(unit).available;
     },
   };
 
   /* ---------- orders ---------- */
 
-  function allOrders() {
-    return read(ORDERS_KEY, []);
-  }
-
-  // Cancel an order that is still "not_paid" and give its units back to stock
+  // Cancel an order that is still "not_paid" (its units are free again,
+  // because "canceled" is not an active status)
   function cancelInPlace(order, reason, type) {
     order.status = "canceled";
     order.canceledAt = new Date().toISOString();
     order.cancelReason = reason;
     order.cancelType = type; // "user" or "expired"
-    order.items.forEach(function (item) {
-      adjustStock(item.unit, 1);
-    });
   }
 
   // Auto-cancel every unpaid order whose 5 minutes are over
@@ -116,15 +218,15 @@
 
   function makeId() {
     var d = new Date();
-    var pad = function (n) {
+    var pad2 = function (n) {
       return String(n).padStart(2, "0");
     };
     var rand = Math.random().toString(36).slice(2, 6).toUpperCase();
     return (
       "NV-" +
       d.getFullYear() +
-      pad(d.getMonth() + 1) +
-      pad(d.getDate()) +
+      pad2(d.getMonth() + 1) +
+      pad2(d.getDate()) +
       "-" +
       rand
     );
@@ -136,6 +238,18 @@
     }, 0);
   }
 
+  function newestFirst(list) {
+    return list.sort(function (a, b) {
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }
+
+  function findMine(orders, id) {
+    return orders.filter(function (o) {
+      return o.id === id && o.owner === owner();
+    })[0];
+  }
+
   NovaPS.orders = {
     sweep: sweep,
 
@@ -143,23 +257,16 @@
     all: function () {
       sweep();
       var me = owner();
-      return allOrders()
-        .filter(function (o) {
+      return newestFirst(
+        allOrders().filter(function (o) {
           return o.owner === me;
-        })
-        .sort(function (a, b) {
-          return b.createdAt.localeCompare(a.createdAt);
-        });
+        }),
+      );
     },
 
     get: function (id) {
       sweep();
-      var me = owner();
-      return (
-        allOrders().filter(function (o) {
-          return o.id === id && o.owner === me;
-        })[0] || null
-      );
+      return findMine(allOrders(), id) || null;
     },
 
     // The order waiting for payment (a user may only have one at a time)
@@ -174,6 +281,11 @@
     // data = { customer, items: [{ unit, days }], notes }
     create: function (data) {
       sweep();
+      if (NovaPS.users.isBlocked(owner())) {
+        throw new Error(
+          "Your account has been blocked. Please contact the admin.",
+        );
+      }
       if (NovaPS.orders.unpaid())
         throw new Error("Please finish your unpaid order first.");
 
@@ -189,22 +301,17 @@
         throw new Error("Invalid number of units.");
 
       // Stock check: every unit in the order must be available
-      var stock = stockAll();
       var need = {};
       items.forEach(function (item) {
         need[item.unit] = (need[item.unit] || 0) + 1;
       });
       Object.keys(need).forEach(function (unit) {
-        if (need[unit] > stock[unit]) {
-          throw new Error("Not enough " + PRODUCTS[unit].name + " in stock.");
+        if (need[unit] > unitInfo(unit).available) {
+          throw new Error("Not enough " + BASE[unit].name + " in stock.");
         }
       });
 
-      // Reserve the units right away (this is what prevents double orders)
-      items.forEach(function (item) {
-        adjustStock(item.unit, -1);
-      });
-
+      // The new order itself reserves the units (they count as "rented")
       var now = Date.now();
       var order = {
         id: makeId(),
@@ -227,9 +334,7 @@
     pay: function (id, proof) {
       sweep();
       var orders = allOrders();
-      var order = orders.filter(function (o) {
-        return o.id === id && o.owner === owner();
-      })[0];
+      var order = findMine(orders, id);
       if (!order) throw new Error("Order not found.");
       if (order.status !== "not_paid")
         throw new Error("This order can no longer be paid.");
@@ -244,9 +349,7 @@
     cancel: function (id, reason) {
       sweep();
       var orders = allOrders();
-      var order = orders.filter(function (o) {
-        return o.id === id && o.owner === owner();
-      })[0];
+      var order = findMine(orders, id);
       if (!order || order.status !== "not_paid")
         throw new Error("This order cannot be canceled.");
       cancelInPlace(order, reason, "user");
@@ -266,6 +369,73 @@
 
     msLeft: function (order) {
       return order.expiresAt - Date.now();
+    },
+
+    /* ----- admin (the real admin check must live on the server) ----- */
+
+    adminAll: function () {
+      sweep();
+      return newestFirst(allOrders());
+    },
+
+    adminGet: function (id) {
+      sweep();
+      return (
+        allOrders().filter(function (o) {
+          return o.id === id;
+        })[0] || null
+      );
+    },
+
+    /*
+     * pending  --accept--> shipped      --deliver--> complete --return--> returned
+     * pending  --reject--> rejected (reason required)
+     */
+    adminAct: function (id, action, reason) {
+      sweep();
+      var orders = allOrders();
+      var order = orders.filter(function (o) {
+        return o.id === id;
+      })[0];
+      if (!order) throw new Error("Order not found.");
+
+      var now = new Date().toISOString();
+      var from = {
+        accept: "pending",
+        reject: "pending",
+        deliver: "shipped",
+        return: "complete",
+      }[action];
+      if (!from) throw new Error("Unknown action.");
+      if (order.status !== from)
+        throw new Error("This order is no longer " + from + ".");
+
+      if (action === "accept") {
+        order.status = "shipped";
+        order.shippedAt = now;
+      } else if (action === "reject") {
+        if (!reason || reason.trim().length < 5)
+          throw new Error("Please write the reason (at least 5 characters).");
+        order.status = "rejected";
+        order.rejectedAt = now;
+        order.rejectReason = reason.trim();
+      } else if (action === "deliver") {
+        var longest = Math.max.apply(
+          null,
+          order.items.map(function (i) {
+            return i.days;
+          }),
+        );
+        order.status = "complete";
+        order.completedAt = now;
+        order.dueAt = Date.now() + longest * DAY_MS; // the rental starts now
+      } else {
+        order.status = "returned";
+        order.returnedAt = now;
+        order.returnedLate = Date.now() > (order.dueAt || 0);
+      }
+      write(ORDERS_KEY, orders);
+      return order;
     },
   };
 
@@ -302,8 +472,8 @@
 
   /*
    * data = { customer: { fullname, address }, items: [{ unit, days, price }], total }
-   * header = rows shown first (Status, Date ...); headerDivider draws a line after
-   * them (default: only when there is more than one unit).
+   * header = rows shown first (Status, Order ID ...); data.extra = rows after Address
+   * (Date ...). headerDivider draws a line after them (default: only with 2+ units).
    */
   NovaPS.summaryRows = function (data, header, headerDivider) {
     var rows = [];
@@ -312,10 +482,11 @@
     });
     rows.push({ label: "Customer", value: data.customer.fullname });
     rows.push({ label: "Address", value: data.customer.address });
-    if (data.extra)
+    if (data.extra) {
       data.extra.forEach(function (r) {
         rows.push(r);
       });
+    }
 
     var many = data.items.length > 1;
     if (headerDivider === undefined ? many : headerDivider)
@@ -323,8 +494,10 @@
 
     data.items.forEach(function (item, i) {
       if (i > 0) rows.push({ divider: true });
-      var name = PRODUCTS[item.unit].name;
-      rows.push({ label: many ? "Unit #" + (i + 1) : "Unit", value: name });
+      rows.push({
+        label: many ? "Unit #" + (i + 1) : "Unit",
+        value: BASE[item.unit].name,
+      });
       rows.push({ label: "Duration", value: NovaPS.formatDays(item.days) });
       if (many) rows.push({ label: "Price", value: NovaPS.money(item.price) });
     });

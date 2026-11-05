@@ -131,6 +131,9 @@
     Object.keys(PRODUCTS).forEach(function (unit) {
       stock[unit] = NovaPS.stock.get(unit);
     });
+    form.querySelectorAll("[data-price]").forEach(function (el) {
+      el.textContent = NovaPS.money(PRODUCTS[el.dataset.price].price) + "/day";
+    });
     var selected = blocks.map(unitOf);
     var stockProblem = false;
 

@@ -108,7 +108,7 @@
         ),
       );
     }
-    if (order.status === "complete") {
+    if (order.status === "complete" || order.status === "returned") {
       actions.appendChild(
         link(
           "Order Again",
@@ -139,7 +139,11 @@
       current === "all"
         ? orders
         : orders.filter(function (o) {
-            return o.status === current.replace("-", "_");
+            var status = current.replace("-", "_");
+            return (
+              o.status === status ||
+              (status === "complete" && o.status === "returned")
+            );
           });
 
     list.textContent = "";
