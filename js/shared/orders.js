@@ -1,5 +1,6 @@
 /*
- * Shared order system: units (stock, prices), orders, 5-minute payment timer.
+ * Shared order system: units (stock, prices), orders, rentals, 5-minute
+ * payment timer, extensions and late fees.
  * Requires js/shared/session.js.
  *
  * DEMO ONLY - everything lives in this browser's localStorage, so every
@@ -7,22 +8,26 @@
  *
  * Available units are always CALCULATED, never stored:
  *   available = total - maintenance - rented
- * where "rented" = units inside orders that are not_paid, pending, shipped or
- * complete (not returned yet). Canceled, rejected and returned orders free
- * their units automatically.
+ * where "rented" = units inside rental orders that are not_paid, pending,
+ * shipped or complete (not returned yet). Canceled, rejected and returned
+ * orders free their units automatically. Extension orders never hold units.
  *
  *   NovaPS.units.all / get / set            (admin "Unit" page)
  *   NovaPS.stock.get(unit)                  available units
- *   NovaPS.orders.create / pay / cancel / get / all / unpaid / sweep   (customer)
+ *   NovaPS.orders.create / createExtension / pay / cancel / get / all / unpaid / sweep
  *   NovaPS.orders.adminAll / adminGet / adminAct                       (admin)
+ *   NovaPS.rentals.*                        time left, late fee, extension limit
  *   NovaPS.summaryRows + NovaPS.renderRows  order summary lists
- *   NovaPS.money / formatDate / formatTime / formatDays / formatClock
+ *   NovaPS.money / formatDate / formatTime / formatDays / formatClock / formatHMS
  */
 (function () {
   var ORDERS_KEY = "novaps_orders";
   var UNITS_KEY = "novaps_units";
+  var ALERTS_KEY = "novaps_alerts"; // "ends soon" pop-ups that were already shown
   var PAY_WINDOW_MS = 5 * 60 * 1000;
   var DAY_MS = 24 * 60 * 60 * 1000;
+  var HOUR_MS = 60 * 60 * 1000;
+  var FINE_PER_MIN = 1000; // late fee (Rp) per minute after the rental time is over
 
   // Statuses that keep a unit busy
   var ACTIVE = ["not_paid", "pending", "shipped", "complete"];
@@ -44,9 +49,12 @@
     },
   };
 
-  NovaPS.MAX_DAYS = 7;
+  NovaPS.MAX_DAYS = 7; // one order
+  NovaPS.MAX_TOTAL_DAYS = 7; // rental + extensions together
   NovaPS.MAX_UNITS = 2;
   NovaPS.LOW_STOCK = 3;
+  NovaPS.FINE_PER_MIN = FINE_PER_MIN;
+  NovaPS.HOUR_MS = HOUR_MS;
 
   // Order statuses as customers see them
   NovaPS.STATUS = {
@@ -54,7 +62,7 @@
     pending: { label: "Pending", text: "text-indigo-500" },
     shipped: { label: "Shipped", text: "text-sky-600" },
     complete: { label: "Complete", text: "text-green-600" },
-    returned: { label: "Complete", text: "text-green-600" }, // rental finished
+    returned: { label: "Complete", text: "text-green-600" }, // rental finished (Time Remaining shows "Returned")
     canceled: { label: "Canceled", text: "text-orange-700" },
     rejected: { label: "Rejected", text: "text-red-600" },
   };
@@ -101,7 +109,8 @@
   function rentedCount(unit) {
     var count = 0;
     allOrders().forEach(function (order) {
-      if (ACTIVE.indexOf(order.status) === -1) return;
+      if (order.type === "extend" || ACTIVE.indexOf(order.status) === -1)
+        return;
       order.items.forEach(function (item) {
         if (item.unit === unit) count++;
       });
@@ -192,6 +201,41 @@
     },
   };
 
+  /* ---------- rental time: due date, late fee ---------- */
+
+  function longestDays(order) {
+    return Math.max.apply(
+      null,
+      order.items.map(function (i) {
+        return i.days;
+      }),
+    );
+  }
+
+  // When the unit must be back (older rentals have no dueAt saved)
+  function dueOf(order) {
+    if (order.dueAt) return order.dueAt;
+    return (
+      Date.parse(order.completedAt || order.createdAt) +
+      longestDays(order) * DAY_MS
+    );
+  }
+
+  function overdueMinutes(order) {
+    var late = Date.now() - dueOf(order);
+    return late > 0 ? Math.ceil(late / 60000) : 0; // every started minute counts
+  }
+
+  function fineOf(order) {
+    return overdueMinutes(order) * FINE_PER_MIN;
+  }
+
+  function clearAlerts(orderId) {
+    var seen = read(ALERTS_KEY, {});
+    delete seen[orderId];
+    write(ALERTS_KEY, seen);
+  }
+
   /* ---------- orders ---------- */
 
   // Cancel an order that is still "not_paid" (its units are free again,
@@ -216,14 +260,15 @@
     if (changed) write(ORDERS_KEY, orders);
   }
 
-  function makeId() {
+  function makeId(prefix) {
     var d = new Date();
     var pad2 = function (n) {
       return String(n).padStart(2, "0");
     };
     var rand = Math.random().toString(36).slice(2, 6).toUpperCase();
     return (
-      "NV-" +
+      (prefix || "NV") +
+      "-" +
       d.getFullYear() +
       pad2(d.getMonth() + 1) +
       pad2(d.getDate()) +
@@ -250,10 +295,20 @@
     })[0];
   }
 
+  function guardCustomer() {
+    if (NovaPS.users.isBlocked(owner())) {
+      throw new Error(
+        "Your account has been blocked. Please contact the admin.",
+      );
+    }
+    if (NovaPS.orders.unpaid())
+      throw new Error("Please finish your unpaid order first.");
+  }
+
   NovaPS.orders = {
     sweep: sweep,
 
-    // Orders of the logged-in user, newest first
+    // Orders of the logged-in user, newest first (rentals and extensions)
     all: function () {
       sweep();
       var me = owner();
@@ -281,13 +336,12 @@
     // data = { customer, items: [{ unit, days }], notes }
     create: function (data) {
       sweep();
-      if (NovaPS.users.isBlocked(owner())) {
+      guardCustomer();
+      if (NovaPS.rentals.overdue().length) {
         throw new Error(
-          "Your account has been blocked. Please contact the admin.",
+          "You have an overdue rental. Return the unit or extend it first.",
         );
       }
-      if (NovaPS.orders.unpaid())
-        throw new Error("Please finish your unpaid order first.");
 
       var items = data.items.map(function (item) {
         var product = PRODUCTS[item.unit];
@@ -330,6 +384,62 @@
       return order;
     },
 
+    // Extend a rental that is in the customer's hands (status "complete").
+    // The late fee (if overdue) is added to the price of the extension.
+    createExtension: function (parentId, days) {
+      sweep();
+      guardCustomer();
+
+      var parent = findMine(allOrders(), parentId);
+      if (!parent || parent.type === "extend" || parent.status !== "complete") {
+        throw new Error("This rental cannot be extended.");
+      }
+      var max = NovaPS.rentals.maxExtend(parent);
+      days = Number(days);
+      if (!Number.isInteger(days) || days < 1 || days > max) {
+        throw new Error(
+          max < 1
+            ? "This rental already has the maximum of " +
+                NovaPS.MAX_TOTAL_DAYS +
+                " days."
+            : "Choose 1 to " +
+                max +
+                " day(s). A rental is limited to " +
+                NovaPS.MAX_TOTAL_DAYS +
+                " days in total.",
+        );
+      }
+
+      var items = parent.items.map(function (item) {
+        return {
+          unit: item.unit,
+          days: days,
+          price: PRODUCTS[item.unit].price * days,
+        };
+      });
+      var fine = fineOf(parent);
+      var now = Date.now();
+      var order = {
+        id: makeId("EX"),
+        owner: owner(),
+        type: "extend",
+        parentId: parent.id,
+        customer: parent.customer,
+        items: items,
+        notes: "",
+        fine: fine,
+        fineMinutes: overdueMinutes(parent),
+        total: total(items) + fine,
+        status: "not_paid",
+        createdAt: new Date(now).toISOString(),
+        expiresAt: now + PAY_WINDOW_MS,
+      };
+      var orders = allOrders();
+      orders.push(order);
+      write(ORDERS_KEY, orders);
+      return order;
+    },
+
     // proof = data URL of the payment proof picture
     pay: function (id, proof) {
       sweep();
@@ -338,6 +448,29 @@
       if (!order) throw new Error("Order not found.");
       if (order.status !== "not_paid")
         throw new Error("This order can no longer be paid.");
+
+      if (order.type === "extend") {
+        // The extra time starts right away, so waiting for the admin costs nothing
+        var parent = orders.filter(function (o) {
+          return o.id === order.parentId;
+        })[0];
+        if (!parent || parent.status !== "complete") {
+          throw new Error(
+            "This rental was already returned, so it cannot be extended.",
+          );
+        }
+        var previous = dueOf(parent);
+        var base =
+          order.fine > 0
+            ? Math.max(previous, Date.parse(order.createdAt))
+            : previous;
+        order.prevDueAt = previous;
+        order.prevExtraDays = parent.extraDays || 0;
+        parent.dueAt = base + order.items[0].days * DAY_MS;
+        parent.extraDays = (parent.extraDays || 0) + order.items[0].days;
+        clearAlerts(parent.id);
+      }
+
       order.status = "pending";
       order.paidAt = new Date().toISOString();
       order.proof = proof;
@@ -388,8 +521,10 @@
     },
 
     /*
-     * pending  --accept--> shipped      --deliver--> complete --return--> returned
-     * pending  --reject--> rejected (reason required)
+     * rental:     pending --accept--> shipped --deliver--> complete --return--> returned
+     * extension:  pending --accept--> complete (nothing is shipped)
+     * both:       pending --reject--> rejected (reason required)
+     * Rejecting an extension takes the extra time away again.
      */
     adminAct: function (id, action, reason) {
       sweep();
@@ -400,43 +535,104 @@
       if (!order) throw new Error("Order not found.");
 
       var now = new Date().toISOString();
-      var from = {
-        accept: "pending",
-        reject: "pending",
-        deliver: "shipped",
-        return: "complete",
-      }[action];
-      if (!from) throw new Error("Unknown action.");
+      var isExtension = order.type === "extend";
+      var allowed = isExtension
+        ? { accept: "pending", reject: "pending" }
+        : {
+            accept: "pending",
+            reject: "pending",
+            deliver: "shipped",
+            return: "complete",
+          };
+      var from = allowed[action];
+      if (!from) throw new Error("This action does not apply to this order.");
       if (order.status !== from)
         throw new Error("This order is no longer " + from + ".");
 
       if (action === "accept") {
-        order.status = "shipped";
-        order.shippedAt = now;
+        order.status = isExtension ? "complete" : "shipped";
+        if (isExtension) order.completedAt = now;
+        else order.shippedAt = now;
       } else if (action === "reject") {
-        if (!reason || reason.trim().length < 5)
+        if (!reason || reason.trim().length < 5) {
           throw new Error("Please write the reason (at least 5 characters).");
+        }
         order.status = "rejected";
         order.rejectedAt = now;
         order.rejectReason = reason.trim();
+        if (isExtension) {
+          var parent = orders.filter(function (o) {
+            return o.id === order.parentId;
+          })[0];
+          if (parent && parent.status === "complete" && order.prevDueAt) {
+            parent.dueAt = order.prevDueAt;
+            parent.extraDays = order.prevExtraDays || 0;
+            clearAlerts(parent.id);
+          }
+        }
       } else if (action === "deliver") {
-        var longest = Math.max.apply(
-          null,
-          order.items.map(function (i) {
-            return i.days;
-          }),
-        );
         order.status = "complete";
         order.completedAt = now;
-        order.dueAt = Date.now() + longest * DAY_MS; // the rental starts now
+        order.dueAt = Date.now() + longestDays(order) * DAY_MS; // the rental starts now
       } else {
+        var late = overdueMinutes(order);
         order.status = "returned";
         order.returnedAt = now;
-        order.returnedLate = Date.now() > (order.dueAt || 0);
+        order.returnedLate = late > 0;
+        order.lateMinutes = late;
+        order.lateFee = late * FINE_PER_MIN; // to be collected from the customer
       }
       write(ORDERS_KEY, orders);
       return order;
     },
+  };
+
+  /* ---------- rentals (units in the customer's hands) ---------- */
+
+  NovaPS.rentals = {
+    dueAt: dueOf,
+    msLeft: function (order) {
+      return dueOf(order) - Date.now();
+    },
+    fine: fineOf,
+    fineMinutes: overdueMinutes,
+    totalDays: function (order) {
+      return longestDays(order) + (order.extraDays || 0);
+    },
+    // How many more days may still be added (a rental is 7 days at most)
+    maxExtend: function (order) {
+      return Math.max(
+        0,
+        NovaPS.MAX_TOTAL_DAYS - NovaPS.rentals.totalDays(order),
+      );
+    },
+    // The logged-in user's rentals that are not returned yet, most urgent first
+    mine: function () {
+      return NovaPS.orders
+        .all()
+        .filter(function (o) {
+          return o.type !== "extend" && o.status === "complete";
+        })
+        .sort(function (a, b) {
+          return dueOf(a) - dueOf(b);
+        });
+    },
+    overdue: function () {
+      return NovaPS.rentals.mine().filter(function (o) {
+        return dueOf(o) <= Date.now();
+      });
+    },
+  };
+
+  // Countdown colour: green > 4 h, amber <= 4 h, orange <= 1 h, red = overdue
+  NovaPS.rentalTone = function (ms) {
+    if (ms <= 0)
+      return { key: "over", pill: "bg-red-800", text: "text-red-800" };
+    if (ms <= HOUR_MS)
+      return { key: "h1", pill: "bg-orange-700", text: "text-orange-700" };
+    if (ms <= 4 * HOUR_MS)
+      return { key: "h4", pill: "bg-amber-600", text: "text-amber-600" };
+    return { key: "ok", pill: "bg-green-600", text: "text-green-600" };
   };
 
   /* ---------- formatting ---------- */
@@ -467,6 +663,19 @@
     var minutes = Math.floor(secs / 60);
     return (padMinutes ? pad(minutes) : minutes) + ":" + pad(secs % 60);
   };
+  // 259200000 -> "72:00:00"; negative (overdue) -> "-2:00:00"
+  NovaPS.formatHMS = function (ms) {
+    var secs = ms < 0 ? Math.floor(-ms / 1000) : Math.ceil(ms / 1000);
+    var h = Math.floor(secs / 3600);
+    return (
+      (ms < 0 ? "-" : "") +
+      h +
+      ":" +
+      pad(Math.floor((secs % 3600) / 60)) +
+      ":" +
+      pad(secs % 60)
+    );
+  };
 
   /* ---------- order summary lists ---------- */
 
@@ -474,6 +683,7 @@
    * data = { customer: { fullname, address }, items: [{ unit, days, price }], total }
    * header = rows shown first (Status, Order ID ...); data.extra = rows after Address
    * (Date ...). headerDivider draws a line after them (default: only with 2+ units).
+   * Extension orders (data.type "extend") show "(Extend)" and the late fee.
    */
   NovaPS.summaryRows = function (data, header, headerDivider) {
     var rows = [];
@@ -489,18 +699,27 @@
     }
 
     var many = data.items.length > 1;
+    var extension = data.type === "extend";
     if (headerDivider === undefined ? many : headerDivider)
       rows.push({ divider: true });
 
     data.items.forEach(function (item, i) {
       if (i > 0) rows.push({ divider: true });
-      rows.push({
-        label: many ? "Unit #" + (i + 1) : "Unit",
-        value: BASE[item.unit].name,
-      });
+      var name = BASE[item.unit].name + (extension ? " (Extend)" : "");
+      rows.push({ label: many ? "Unit #" + (i + 1) : "Unit", value: name });
       rows.push({ label: "Duration", value: NovaPS.formatDays(item.days) });
-      if (many) rows.push({ label: "Price", value: NovaPS.money(item.price) });
+      if (many || extension)
+        rows.push({ label: "Price", value: NovaPS.money(item.price) });
     });
+
+    if (data.fine) {
+      rows.push({ divider: true });
+      rows.push({
+        label: "Late fee (" + data.fineMinutes + " min)",
+        value: NovaPS.money(data.fine),
+        valueClass: "text-red-600",
+      });
+    }
 
     rows.push({ divider: true });
     rows.push({ label: "Total", value: NovaPS.money(data.total), total: true });

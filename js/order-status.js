@@ -61,12 +61,23 @@
         NovaPS.PRODUCTS[i.unit].name + " (" + NovaPS.formatDays(i.days) + ")"
       );
     });
-    info.appendChild(el("p", "font-semibold text-black", names.join(" + ")));
+    var extension = order.type === "extend";
+    info.appendChild(
+      el(
+        "p",
+        "font-semibold text-black",
+        names.join(" + ") + (extension ? " (Extend)" : ""),
+      ),
+    );
     info.appendChild(
       el(
         "p",
         "text-[13px] break-words text-slate-500",
-        units.join(", ") + " · " + order.customer.address,
+        extension
+          ? names.join(" + ") +
+              ", Extend " +
+              NovaPS.formatDays(order.items[0].days)
+          : units.join(", ") + " · " + order.customer.address,
       ),
     );
     info.appendChild(
@@ -108,7 +119,7 @@
         ),
       );
     }
-    if (order.status === "complete" || order.status === "returned") {
+    if (order.status === "returned" && !extension) {
       actions.appendChild(
         link(
           "Order Again",

@@ -12,12 +12,14 @@ novaps/
 │   ├── order-form.html           Order Form (needs login)
 │   ├── payment.html              QRIS payment + 5 minute timer (needs login)
 │   ├── order-detail.html         Receipt / order detail (needs login)
+│   ├── time-remaining.html       Live countdown of rented units (needs login)
+│   ├── extend.html               Extend a rental, max 7 days in total (needs login)
 │   └── account.html              My Profile (needs login)
 ├── admin/                        Admin dashboard (log in at admin/login.html)
 │   ├── login.html
 │   ├── dashboard.html            Status totals, orders to verify, sales
 │   ├── orders.html               All orders: search, filter, verify
-│   ├── time-remaining.html       (still being built)
+│   ├── time-remaining.html       Live countdown of every rented unit
 │   ├── units.html                Price, total and maintenance units
 │   └── users.html                Users, details and blocking
 ├── src/                          Tailwind sources (edit these)
@@ -36,7 +38,8 @@ novaps/
 │   │   ├── navbar.js             Profile menu + logout
 │   │   ├── validation.js         Form validation
 │   │   ├── image.js              Image resize helper
-│   │   ├── orders.js             Units, stock, orders, 5 minute payment timer
+│   │   ├── orders.js             Units, stock, orders, rentals, extensions, late fees
+│   │   ├── rental-alerts.js      4 hour / 1 hour / overdue pop-ups for customers
 │   │   ├── admin.js              Admin session, page guard, Admin menu
 │   │   ├── admin-ui.js           Admin tables, pop-ups, order detail pop-up
 │   │   └── tabs.js               Tab behaviour
@@ -76,6 +79,14 @@ already enabled in `.vscode/settings.json`.
 
 `vercel.json` runs `npm run build` and serves the project root. Commit the
 `css/` folder too, so the site also works on hosts that do not build (GitHub Pages).
+
+## Rentals, extensions and late fees (demo)
+
+- The countdown starts when the admin confirms delivery (status Complete).
+- Pop-ups appear at 4 hours and 1 hour left. After the time is over the
+  customer can only open Time Remaining or pay an extension.
+- Late fee: Rp 1.000 for every started minute after the time is over.
+- A rental lasts 7 days in total, including extensions.
 
 ## Admin (demo)
 
