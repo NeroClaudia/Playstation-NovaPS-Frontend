@@ -221,8 +221,15 @@
     );
   }
 
+  // While a paid extension waits for the admin, the clock stands still
+  // (order.hold.at): the time left and the late fee stop changing.
+  function nowFor(order) {
+    var now = Date.now();
+    return order.hold ? Math.min(now, order.hold.at) : now;
+  }
+
   function overdueMinutes(order) {
-    var late = Date.now() - dueOf(order);
+    var late = nowFor(order) - dueOf(order);
     return late > 0 ? Math.ceil(late / 60000) : 0; // every started minute counts
   }
 
@@ -394,6 +401,11 @@
       if (!parent || parent.type === "extend" || parent.status !== "complete") {
         throw new Error("This rental cannot be extended.");
       }
+      if (NovaPS.rentals.pendingExtension(parent)) {
+        throw new Error(
+          "Your previous extension is still waiting for admin verification.",
+        );
+      }
       var max = NovaPS.rentals.maxExtend(parent);
       days = Number(days);
       if (!Number.isInteger(days) || days < 1 || days > max) {
@@ -450,25 +462,27 @@
         throw new Error("This order can no longer be paid.");
 
       if (order.type === "extend") {
-        // The extra time starts right away, so waiting for the admin costs nothing
-        var parent = orders.filter(function (o) {
+        var host = orders.filter(function (o) {
           return o.id === order.parentId;
         })[0];
-        if (!parent || parent.status !== "complete") {
+        if (!host || host.status !== "complete") {
           throw new Error(
             "This rental was already returned, so it cannot be extended.",
           );
         }
-        var previous = dueOf(parent);
-        var base =
+        if (host.hold) {
+          throw new Error(
+            "Another extension is already waiting for verification.",
+          );
+        }
+        // The extra time is added only when the admin accepts the extension.
+        // Until then the clock stands still once the time is over, so the late
+        // fee stops growing while the customer waits.
+        var stopAt =
           order.fine > 0
-            ? Math.max(previous, Date.parse(order.createdAt))
-            : previous;
-        order.prevDueAt = previous;
-        order.prevExtraDays = parent.extraDays || 0;
-        parent.dueAt = base + order.items[0].days * DAY_MS;
-        parent.extraDays = (parent.extraDays || 0) + order.items[0].days;
-        clearAlerts(parent.id);
+            ? Date.parse(order.createdAt) // the fine is already paid up to checkout
+            : Math.max(dueOf(host), Date.now());
+        host.hold = { extId: order.id, at: stopAt };
       }
 
       order.status = "pending";
@@ -550,9 +564,28 @@
         throw new Error("This order is no longer " + from + ".");
 
       if (action === "accept") {
-        order.status = isExtension ? "complete" : "shipped";
-        if (isExtension) order.completedAt = now;
-        else order.shippedAt = now;
+        if (isExtension) {
+          var host = orders.filter(function (o) {
+            return o.id === order.parentId;
+          })[0];
+          if (!host || host.status !== "complete") {
+            throw new Error(
+              "This rental was already returned. Reject the extension instead.",
+            );
+          }
+          // The new time starts now. If the old time had run out (overdue),
+          // the negative time is replaced by the new rental time.
+          var start = Math.max(dueOf(host), Date.now());
+          host.dueAt = start + order.items[0].days * DAY_MS;
+          host.extraDays = (host.extraDays || 0) + order.items[0].days;
+          delete host.hold;
+          clearAlerts(host.id);
+          order.status = "complete";
+          order.completedAt = now;
+        } else {
+          order.status = "shipped";
+          order.shippedAt = now;
+        }
       } else if (action === "reject") {
         if (!reason || reason.trim().length < 5) {
           throw new Error("Please write the reason (at least 5 characters).");
@@ -561,13 +594,15 @@
         order.rejectedAt = now;
         order.rejectReason = reason.trim();
         if (isExtension) {
-          var parent = orders.filter(function (o) {
+          var owner2 = orders.filter(function (o) {
             return o.id === order.parentId;
           })[0];
-          if (parent && parent.status === "complete" && order.prevDueAt) {
-            parent.dueAt = order.prevDueAt;
-            parent.extraDays = order.prevExtraDays || 0;
-            clearAlerts(parent.id);
+          if (owner2 && owner2.hold) {
+            // The clock continues where it stopped: the waiting time is not counted
+            owner2.dueAt =
+              dueOf(owner2) + Math.max(0, Date.now() - owner2.hold.at);
+            delete owner2.hold;
+            clearAlerts(owner2.id);
           }
         }
       } else if (action === "deliver") {
@@ -592,10 +627,22 @@
   NovaPS.rentals = {
     dueAt: dueOf,
     msLeft: function (order) {
-      return dueOf(order) - Date.now();
+      return dueOf(order) - nowFor(order);
     },
     fine: fineOf,
     fineMinutes: overdueMinutes,
+    // A paid extension that the admin has not verified yet (or null)
+    pendingExtension: function (order) {
+      return (
+        allOrders().filter(function (o) {
+          return (
+            o.type === "extend" &&
+            o.parentId === order.id &&
+            o.status === "pending"
+          );
+        })[0] || null
+      );
+    },
     totalDays: function (order) {
       return longestDays(order) + (order.extraDays || 0);
     },
@@ -619,7 +666,7 @@
     },
     overdue: function () {
       return NovaPS.rentals.mine().filter(function (o) {
-        return dueOf(o) <= Date.now();
+        return NovaPS.rentals.msLeft(o) <= 0;
       });
     },
   };

@@ -160,6 +160,17 @@
     if (order.status === "rejected" && order.rejectReason) {
       extra.push({ label: "Reason", value: order.rejectReason });
     }
+    var waiting = rental ? NovaPS.rentals.pendingExtension(order) : null;
+    if (waiting) {
+      extra.push({
+        label: "Extension",
+        value:
+          "+" +
+          NovaPS.formatDays(waiting.items[0].days) +
+          ", waiting for admin verification",
+        valueClass: "text-indigo-500",
+      });
+    }
     if (order.notes) extra.push({ label: "Notes", value: order.notes });
     order.extra = extra;
 
@@ -178,9 +189,11 @@
     $("pay-box-label").textContent = rental
       ? "Time remaining"
       : "Time left to pay";
+    $("act-cancel").hidden = !unpaid;
     $("act-pay").hidden = !unpaid;
     $("act-pay").href = "payment.html?order=" + encodeURIComponent(order.id);
-    $("act-extend").hidden = !rental || NovaPS.rentals.maxExtend(order) < 1;
+    $("act-extend").hidden =
+      !rental || !!waiting || NovaPS.rentals.maxExtend(order) < 1;
     $("act-extend").href = "extend.html?order=" + encodeURIComponent(order.id);
     $("act-again").hidden = order.status !== "returned" || extension;
     $("act-again").href = "order-form.html?unit=" + order.items[0].unit;
@@ -211,6 +224,10 @@
       render();
     }
   }
+
+  $("act-cancel").addEventListener("click", function () {
+    NovaPS.askCancel(id, render); // asks for a reason, then shows the canceled receipt
+  });
 
   render();
 })();

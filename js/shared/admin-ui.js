@@ -256,7 +256,7 @@ window.NovaAdmin = (function () {
             ? message + " Late fee to collect: " + NovaPS.money(done.lateFee)
             : message,
         );
-        show(currentId);
+        m.close(); // done: no need to press the X
         if (onChange) onChange();
       } catch (e) {
         toast(e.message);
@@ -323,6 +323,19 @@ window.NovaAdmin = (function () {
         kv(info, "Time remaining", "").lastChild.replaceWith(pill);
         if (order.extraDays)
           kv(info, "Extended", "+" + NovaPS.formatDays(order.extraDays));
+        var waitingExt = NovaPS.rentals.pendingExtension(order);
+        if (waitingExt) {
+          kv(
+            info,
+            "Extension waiting",
+            "+" +
+              NovaPS.formatDays(waitingExt.items[0].days) +
+              " (" +
+              waitingExt.id +
+              "), clock paused",
+            "text-indigo-500",
+          );
+        }
         if (left <= 0) {
           kv(
             info,

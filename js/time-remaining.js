@@ -105,6 +105,7 @@
       ),
     );
 
+    var waiting = !returned && NovaPS.rentals.pendingExtension(order);
     var right = el("p", "text-[15px]");
     if (returned) {
       right.appendChild(el("span", "text-black", "Returned"));
@@ -114,6 +115,15 @@
       var pill = el("span", pillClass(left), NovaPS.formatHMS(left));
       right.appendChild(pill);
       timers.push({ el: pill, order: order, key: NovaPS.rentalTone(left).key });
+    }
+    if (waiting) {
+      right.appendChild(
+        el(
+          "span",
+          "mt-1 block text-right text-xs text-indigo-500",
+          "Extension waiting for verification",
+        ),
+      );
     }
     top.appendChild(info);
     top.appendChild(right);
@@ -126,7 +136,12 @@
         BTN_OUTLINE,
       ),
     );
-    if (!returned && left > 0 && NovaPS.rentals.maxExtend(order) > 0) {
+    if (
+      !returned &&
+      !waiting &&
+      left > 0 &&
+      NovaPS.rentals.maxExtend(order) > 0
+    ) {
       actions.appendChild(
         link(
           "Extend",

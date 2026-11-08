@@ -104,7 +104,18 @@
       var left = NovaPS.rentals.msLeft(order);
       var pill = ui.el("span", pillClass(left), NovaPS.formatHMS(left));
       pills.push({ el: pill, order: order, key: NovaPS.rentalTone(left).key });
-      tr.appendChild(ui.cell(pill));
+      var timeCell = ui.el("div", "leading-tight");
+      timeCell.appendChild(pill);
+      if (NovaPS.rentals.pendingExtension(order)) {
+        timeCell.appendChild(
+          ui.el(
+            "p",
+            "mt-1 text-xs text-indigo-500",
+            "Extension waiting (clock paused)",
+          ),
+        );
+      }
+      tr.appendChild(ui.cell(timeCell));
 
       tr.appendChild(
         ui.cell(

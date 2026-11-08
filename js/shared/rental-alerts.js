@@ -157,12 +157,17 @@
   function open(kind, order) {
     current = { kind: kind, order: order };
     var copy = COPY[kind];
+    // A paid extension is waiting for the admin: the late fee is paused
+    var waiting = kind === "over" && !!NovaPS.rentals.pendingExtension(order);
+    current.waiting = waiting;
     icon.className =
       "mx-auto mb-3.5 grid size-14 place-items-center rounded-full " +
       copy.tone;
     icon.innerHTML = copy.icon; // fixed strings above, never user input
-    title.textContent = copy.title;
-    text.textContent = copy.text;
+    title.textContent = waiting ? "Waiting for admin verification" : copy.title;
+    text.textContent = waiting
+      ? "Your extension payment was received. The late fee is paused until the admin verifies it. Until then you can only view Time Remaining."
+      : copy.text;
     info.textContent = unitNames(order) + " · " + order.id;
     fineBox.hidden = kind !== "over";
     logout.hidden = kind !== "over";
@@ -178,9 +183,11 @@
           ),
         );
       }
-      actions.appendChild(
-        linkButton("Extend & pay fine", extendHref(order), "btn-indigo"),
-      );
+      if (!waiting) {
+        actions.appendChild(
+          linkButton("Extend & pay fine", extendHref(order), "btn-indigo"),
+        );
+      }
     } else {
       var later = el(
         "button",
@@ -210,7 +217,7 @@
       "mt-4 font-display text-5xl font-bold " + NovaPS.rentalTone(left).text;
     if (current.kind === "over") {
       fineBox.textContent =
-        "Late fee so far: " +
+        (current.waiting ? "Late fee paused at: " : "Late fee so far: ") +
         NovaPS.money(NovaPS.rentals.fine(current.order)) +
         " (" +
         NovaPS.rentals.fineMinutes(current.order) +
@@ -228,17 +235,20 @@
       document.body.insertBefore(banner, document.body.firstChild);
     }
     var fine = NovaPS.money(NovaPS.rentals.fine(order));
+    var waiting = !!NovaPS.rentals.pendingExtension(order);
     banner.textContent = "";
     banner.appendChild(
       document.createTextNode(
         "Your rental is overdue (" +
           NovaPS.formatHMS(NovaPS.rentals.msLeft(order)) +
-          "). Late fee so far: " +
+          (waiting
+            ? "). Extension waiting for admin verification, late fee paused at: "
+            : "). Late fee so far: ") +
           fine +
           ". ",
       ),
     );
-    if (page !== "extend" && page !== "payment") {
+    if (!waiting && page !== "extend" && page !== "payment") {
       var link = el(
         "a",
         "font-semibold underline underline-offset-2",
@@ -273,8 +283,16 @@
         }
       } else {
         hideBanner();
-        if (!current || current.kind !== "over") open("over", overdue);
-        else update();
+        var waitingNow = !!NovaPS.rentals.pendingExtension(overdue);
+        if (
+          !current ||
+          current.kind !== "over" ||
+          current.waiting !== waitingNow
+        ) {
+          open("over", overdue);
+        } else {
+          update();
+        }
       }
       return;
     }

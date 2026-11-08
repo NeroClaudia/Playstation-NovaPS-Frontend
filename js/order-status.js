@@ -111,6 +111,17 @@
     var actions = el("div", "mt-3 flex flex-wrap justify-end gap-2");
     actions.appendChild(link("Look Detail", detail, BTN_OUTLINE));
     if (order.status === "not_paid") {
+      var cancel = el(
+        "button",
+        BTN +
+          " border-red-600 bg-white text-red-600 hover:bg-red-600 hover:text-white",
+        "Cancel",
+      );
+      cancel.type = "button";
+      cancel.addEventListener("click", function () {
+        NovaPS.askCancel(order.id, render); // asks for a reason, then refreshes the list
+      });
+      actions.appendChild(cancel);
       actions.appendChild(
         link(
           "Pay Now",

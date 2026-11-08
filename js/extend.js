@@ -24,6 +24,11 @@
     return;
   }
 
+  if (NovaPS.rentals.pendingExtension(parent)) {
+    location.replace("time-remaining.html"); // wait for the admin first
+    return;
+  }
+
   var select = $("days");
   var checkout = $("checkout");
   var hint = $("checkout-hint");

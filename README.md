@@ -40,6 +40,7 @@ novaps/
 │   │   ├── image.js              Image resize helper
 │   │   ├── orders.js             Units, stock, orders, rentals, extensions, late fees
 │   │   ├── rental-alerts.js      4 hour / 1 hour / overdue pop-ups for customers
+│   │   ├── cancel-order.js       "Cancel order" pop-up (Order Status, Look Detail)
 │   │   ├── admin.js              Admin session, page guard, Admin menu
 │   │   ├── admin-ui.js           Admin tables, pop-ups, order detail pop-up
 │   │   └── tabs.js               Tab behaviour
@@ -87,6 +88,10 @@ already enabled in `.vscode/settings.json`.
   customer can only open Time Remaining or pay an extension.
 - Late fee: Rp 1.000 for every started minute after the time is over.
 - A rental lasts 7 days in total, including extensions.
+- An extension adds its time only when the admin accepts it. While it waits,
+  an overdue clock stands still (time and late fee stop). Accepted: the new
+  time replaces the negative time. Rejected: the clock continues from where
+  it stopped.
 
 ## Admin (demo)
 
